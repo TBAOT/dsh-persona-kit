@@ -117,6 +117,31 @@ test('a deleted persona can be listed in the trash and restored with its binding
   })
 })
 
+test('the recall endpoint returns recent turns with their block text', async () => {
+  await withTempHome(async (home) => {
+    const { ctx, call } = fakeHost()
+    apply(ctx, {})
+    const headers = { 'x-dsh-persona-kit': '1' }
+    const created = await callApi(call, { method: 'POST', url: '/dsh-persona-kit/api/create', headers, body: { name: '甲' } })
+    const id = created.body.persona.id
+    const reviewDir = path.join(home, 'personas', id, 'review')
+    await mkdir(reviewDir, { recursive: true })
+    const rows = [
+      { at: '2026-11-22T10:00:00Z', turn: 1, status: 'written', recall: { outcome: 'injected', chars: 42, topics: ['a'], block: '可能相关的主题：\n- a｜摘要' } },
+      { at: '2026-11-22T10:05:00Z', turn: 2, status: 'written' },
+      { at: '2026-11-22T10:10:00Z', turn: 3, status: 'written', recall: { outcome: 'trivial', chars: 0, topics: [] } },
+    ]
+    await writeFile(path.join(reviewDir, 'metrics.jsonl'), `${rows.map((row) => JSON.stringify(row)).join('\n')}\n`, 'utf8')
+
+    const got = await callApi(call, { url: `/dsh-persona-kit/api/recall?id=${encodeURIComponent(id)}&limit=5`, headers })
+    assert.equal(got.status, 200)
+    assert.equal(got.body.turns.length, 2, '只返回带 recall 的记录')
+    assert.equal(got.body.turns[0].turn, 1)
+    assert.match(got.body.turns[0].block, /可能相关的主题/)
+    assert.equal(got.body.turns[1].outcome, 'trivial')
+  })
+})
+
 test('the panel can replace a topic body through the api', async () => {
   await withTempHome(async (home) => {
     const { ctx, call } = fakeHost()
