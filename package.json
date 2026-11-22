@@ -33,7 +33,9 @@
     "LICENSE",
     "scripts/audit.mjs",
     "scripts/split-resident.mjs",
-    "scripts/check-dsh-upgrade.mjs"
+    "scripts/check-dsh-upgrade.mjs",
+    "scripts/doctor.mjs",
+    "scripts/release.mjs"
   ],
   "scripts": {
     "test": "node --test",
@@ -56,7 +58,9 @@
     "dsh-plugin",
     "deepseek-harness",
     "memory",
-    "persona"
+    "persona",
+    "deepseek",
+    "skills"
   ],
   "license": "MIT",
   "dsh": {
@@ -74,5 +78,16 @@
   },
   "devDependencies": {
     "yaml": "^2.9.1"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TBAOT/dsh-persona-kit.git"
+  },
+  "homepage": "https://github.com/TBAOT/dsh-persona-kit#readme",
+  "bugs": {
+    "url": "https://github.com/TBAOT/dsh-persona-kit/issues"
   }
 }
