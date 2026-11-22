@@ -91,6 +91,17 @@ operations: [{ action: add | patch | remove, content, old_text, supersedes? }]
 
 **为什么整理不给你在对话里调用**：照 Letta 的做法（`memory_rethink` 只给 sleep-time agent），对话轮只做精确编辑，整层重写放在后台——避免它在聊天中途大扫除。
 
+### 4.5 长对话摘要（压缩事件 → 主题库）
+
+DSH 自家 compaction 生成摘要时会产生 `compaction/summary` 事件（带 `summary: ContentBlock[]`、`shadowedTokenCount`）。
+我们不去抢这件事，只是把那份摘要**落到主题库**：
+
+- slug `会话摘要-<YYYY-MM-DD>`，正文首行写来源（session、时间、遮蔽 token 数）；
+- 同一 session **每小时最多写一次**（节流同步做，避免两次压缩前后脚到达）；
+- 摘要短于 40 字跳过；写入失败只记 warn，不影响回合；
+- 与 `writeTopic` 的追加语义一致：同一天多次压缩会追加到同一篇；
+- `compactionSummary: false` 可关掉。
+
 ## 4.4 谁可以改哪些记忆（`memory/policy.json`）
 
 规则文件**归人所有**：插件永不写它，面板是唯一写入方（照 Letta 的 `.memfs.config.json` + "改它要人工批准"）。
@@ -173,6 +184,7 @@ operations: [{ action: add | patch | remove, content, old_text, supersedes? }]
 | `addOverflow` | `topic` | 改成 `reject` 则恢复"超限即拒" |
 | `consolidate` / `consolidateThreshold` / `consolidateCooldownMs` | `true` / 0.9 / 30 分钟 | 后台整理轮的开关、触发线、冷却 |
 | `staleDays` / `consolidateAgeHint` | 90 / 8 | 多久没被处理算"陈旧"（0 关闭）；整理轮最多列几条陈旧条目给模型看 |
+| `compactionSummary` | `true` | 把 DSH 压缩出来的摘要写进主题库（每 session 每小时一次） |
 | `ttlDays` | `{memory:180}` | 条目有效期（日期粒度，读侧过滤） |
 | `enabled` / `dryRun` / `everyTurns` / `maxTokens` / `provider` / `model` | 复盘相关 | 关闭复盘、只记不写、每几轮一次、输出预算、指定模型 |
 

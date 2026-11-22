@@ -1,5 +1,16 @@
 # 变更日志
 
+## 0.22.0
+
+长对话摘要进主题库（不再自己总结一次）。
+
+- 监听 `session/event` 的 `compaction/summary`（DSH 自家 compaction 已经写好摘要，
+  带 `summary: ContentBlock[]` 与 `shadowedTokenCount`），把它写进主题库：
+  slug `会话摘要-<YYYY-MM-DD>`，正文首行记来源（session / 时间 / 遮蔽 token 数）。
+- 节流同步做：同一 session 每小时最多一条（写入是异步的，两次压缩可能前后脚到达）。
+- 摘要短于 40 字跳过；写入失败只 warn；`compactionSummary: false` 可关闭。
+- 测试 203 项（摘要写入 + 来源行、节流只写一次、过短跳过）。
+
 ## 0.21.0
 
 公开基准适配器：`pnpm bench` + `pnpm import-bench`。

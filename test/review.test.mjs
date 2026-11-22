@@ -146,6 +146,50 @@ test('the consolidation prompt points at entries nobody touched for months', asy
   })
 })
 
+test('a compaction summary lands in the topic library, once per hour', async () => {
+  await withTempHome(async (home) => {
+    const host = fakeHost('{"ops":[]}')
+    apply(host.ctx, { personaId: 'tester' })
+    const text = '这一轮把发布流程、回滚检查项和周末热修规则都过了一遍，结论是周四 18:00 之后不发版，热修要两人确认。'
+    const session = { id: 'session-compact' }
+    const event = {
+      type: 'compaction/summary',
+      data: { compactionId: 'c1', summary: [{ type: 'text', text }], shadowedTokenCount: 1234 },
+    }
+    await emit(host.listeners, 'session/event', session, event)
+    await tick()
+
+    const dir = path.join(home, 'personas', 'tester', 'topics')
+    const files = await readdir(dir).catch(() => [])
+    const digest = files.find((name) => name.startsWith('会话摘要-'))
+    assert.ok(digest, `应写出一篇会话摘要，实际文件：${files.join(', ')}`)
+    const body = await readFile(path.join(dir, digest), 'utf8')
+    assert.match(body, /source|来源/)
+    assert.match(body, /session-compact/)
+    assert.match(body, /1234 token/)
+
+    // 同一 session 一小时内再来一次压缩：不再写
+    await emit(host.listeners, 'session/event', session, event)
+    await tick()
+    const after = await readFile(path.join(dir, digest), 'utf8')
+    assert.equal(after.split(text).length - 1, 1, '同一段摘要只写一次')
+  })
+})
+
+test('a short compaction summary is ignored', async () => {
+  await withTempHome(async (home) => {
+    const host = fakeHost('{"ops":[]}')
+    apply(host.ctx, { personaId: 'tester' })
+    await emit(host.listeners, 'session/event', { id: 'session-short' }, {
+      type: 'compaction/summary',
+      data: { summary: [{ type: 'text', text: '太短了' }] },
+    })
+    await tick()
+    const files = await readdir(path.join(home, 'personas', 'tester', 'topics')).catch(() => [])
+    assert.deepEqual(files.filter((name) => name.startsWith('会话摘要-')), [])
+  })
+})
+
 test('a consolidation pass that keeps an entry refreshes its lastTouchedAt', async () => {
   await withTempHome(async (home) => {
     const memoryDir = path.join(home, 'personas', 'tester', 'memory')
