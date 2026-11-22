@@ -94,3 +94,26 @@ test('injectRecall appends to the last user message and leaves the input alone',
   assert.equal(injectRecall([{ role: 'assistant', content: 'a' }], 'RECALL').injected, false)
   assert.equal(injectRecall(second.messages, 'RECALL').injected, false, '同一个块不会叠加两次')
 })
+
+test('a scorer can change the order, and a broken scorer falls back to keyword', () => {
+  const pair = [
+    { slug: 'a', summary: '部署与发布流程', keywords: ['部署', '发布'], body: '部署流程与回滚' },
+    { slug: 'b', summary: '值班与告警升级', keywords: ['值班'], body: '告警升级路径' },
+  ]
+  assert.equal(rankTopics('部署流程', pair, 2)[0].topic.slug, 'a')
+
+  const preferB = () => (query, topic) => (topic.slug === 'b' ? 1 : 0)
+  const flipped = rankTopics('部署流程', pair, 2, { scorer: preferB(), alpha: 0 })
+  assert.equal(flipped[0].topic.slug, 'b', 'alpha=0 时完全由语义分决定')
+  assert.equal(flipped[0].semantic, 1)
+
+  const sameAsKeyword = rankTopics('部署流程', pair, 2, { scorer: preferB(), alpha: 1 })
+  assert.equal(sameAsKeyword[0].topic.slug, 'a', 'alpha=1 时与关键词一致')
+
+  const broken = () => {
+    throw new Error('boom')
+  }
+  const survived = rankTopics('部署流程', pair, 2, { scorer: broken, alpha: 0.5 })
+  assert.equal(survived[0].topic.slug, 'a', '打分器抛错不能让召回挂掉')
+  assert.equal(survived[0].semantic, null)
+})

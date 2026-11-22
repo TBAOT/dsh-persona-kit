@@ -159,6 +159,7 @@ operations: [{ action: add | patch | remove, content, old_text }]
 | `topicsIndexLimit` | 600 | 主题索引的字符预算 |
 | `topicTtlDays` | 90 | 主题多久不更新就不再注入（0 = 永不过期） |
 | `recallTopN` / `recallBudget` | 3 / 400 | 每轮召回几篇、块多大 |
+| `recallScorer` / `recallAlpha` | `keyword` / 0.5 | 打分方式：`keyword`（默认）、`semantic`（本地字符 n-gram）、`hybrid`（按 alpha 混合）。**实测见第 10 节：语义/混合都不如关键词，默认不要改** |
 | `routeThreshold` | 0.9 | 到这个占用比就把 `add` 转存主题 |
 | `addOverflow` | `topic` | 改成 `reject` 则恢复"超限即拒" |
 | `consolidate` / `consolidateThreshold` / `consolidateCooldownMs` | `true` / 0.9 / 30 分钟 | 后台整理轮的开关、触发线、冷却 |
@@ -199,3 +200,8 @@ curl -H "x-dsh-persona-kit: 1" "http://127.0.0.1:<port>/dsh-persona-kit/api/heal
 4. **主题只增不减**：TTL 只在读侧过滤，归档要手动（面板悬停「归档」）。
 5. **面板 API 只做 loopback + 固定头**，不是身份认证；别把端口暴露出去。
 6. **自动整理轮的效果尚未在真实会话里验证**（单测覆盖了校验与失败路径）。
+7. **语义打分实测更差，所以默认没开**：0.16.0 加了打分器接缝与本地字符 n-gram 打分（`lib/semantic.js`），
+   在 14 道题上实测：关键词 **86%**，semantic **64%**、hybrid **64%**（alpha 0.7/0.8/0.9 分别 64/71/71%），
+   且负例题被误召回。原因是字符 n-gram 对任何中文文本都有非零相似度，把"沾边但无关"的主题也拉了进来。
+   接缝保留（`recallScorer`），**默认仍是 `keyword`**；真正的语义检索需要嵌入模型（本地或接口），
+   没做——因为本机现在没有可用模型，接一个远程 embedding 会让主题正文出本机，需要单独决定。
