@@ -13,6 +13,8 @@ import {
   parseEntries,
   renderBlock,
   sanitizeId,
+  similarity,
+  MERGE_SIMILARITY,
   totalChars,
   usage,
 } from '../lib/store.js'
@@ -244,4 +246,37 @@ test('expired and superseded entries stop being injected but stay in the file', 
   const visible = visibleEntries([active, expired, replaced], meta, '2026-11-14')
   assert.deepEqual(visible, [active])
   assert.equal(visibleEntries([active, expired], { entries: {} }, '2026-11-14').length, 2)
+})
+
+test('supersedes replaces the contradicted entry in place and records the chain', () => {
+  const old = '发布窗口：周四 18:00 之后不发版'
+  const next = '发布窗口改成工作日 10 点到 16 点'
+  // 相似度不高（<0.8），所以没有 supersedes 时会被当成两条并存——这正是要修的问题
+  assert.ok(similarity(old, next) < MERGE_SIMILARITY)
+
+  const single = applyOperation([old], { action: 'add', content: next, supersedes: entryHash(old).slice(0, 6) })
+  assert.equal(single.ok, true)
+  assert.deepEqual(single.entries, [next], '新事实占据旧位置，旧的整条被替换')
+  assert.equal(single.supersededHash, entryHash(old))
+  assert.equal(single.explicit, true)
+
+  const batch = applyOperations([old], [{ action: 'add', content: next, supersedes: old }], 500)
+  assert.equal(batch.ok, true)
+  assert.deepEqual(batch.entries, [next])
+  assert.equal(batch.superseded[entryHash(old)], entryHash(next), '失效链要写进 superseded')
+  assert.equal(batch.replaced.length, 1)
+})
+
+test('an unknown or ambiguous supersedes is refused instead of guessing', () => {
+  const unknown = applyOperation(['甲条'], { action: 'add', content: '新事实', supersedes: 'deadbeef1234' })
+  assert.equal(unknown.ok, false)
+  assert.match(unknown.error, /没有命中/)
+
+  const ambiguous = applyOperation(['项目用 pnpm 构建', '项目用 pnpm 测试'], {
+    action: 'add',
+    content: '项目用 pnpm 发布',
+    supersedes: '项目用 pnpm',
+  })
+  assert.equal(ambiguous.ok, false)
+  assert.match(ambiguous.error, /命中 2 条/)
 })

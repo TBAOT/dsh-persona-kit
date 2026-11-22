@@ -60,10 +60,13 @@
 
 ```
 target: user | memory | topic
-operations: [{ action: add | patch | remove, content, old_text }]
+operations: [{ action: add | patch | remove, content, old_text, supersedes? }]
 ```
 
 - `add`：**一条一个事实、≤120 字**。超长直接拒，并告诉你压成一句话、过程写 topic；
+- `add` + `supersedes`：新事实**推翻**某条旧条目时（同一件事改了口径：时间、数字、规则、偏好变了），填旧条目的
+  12 位 hash 前缀或唯一片段。系统把旧文本整条替换成新的（位置不变），并在 `meta.json` 里记
+  `status: superseded`、`supersededBy: <新 hash>`；命中 0 条或多条都直接拒（宁可重问，也不猜错对象）。只是补细节不要填；
 - `patch`：只给"替换 old_text 的那一小段"，复述上下文会被拒（否则会把句子写两遍）；patch 不设长度上限，它正是把旧长条目改短的路径；
 - `remove`：按唯一片段删整条；
 - `target=topic`：写正文，需要 `topic`（slug）+ `summary`（≤30 字）+ 可选 `keywords`（检索别名）。
@@ -203,8 +206,11 @@ curl -H "x-dsh-persona-kit: 1" "http://127.0.0.1:<port>/dsh-persona-kit/api/heal
 4. **主题只增不减**：TTL 只在读侧过滤，归档要手动（面板悬停「归档」）。
 5. **面板 API 只做 loopback + 固定头**，不是身份认证；别把端口暴露出去。
 6. **自动整理轮的效果尚未在真实会话里验证**（单测覆盖了校验与失败路径）。
-7. **语义打分实测更差，所以默认没开**：0.16.0 加了打分器接缝与本地字符 n-gram 打分（`lib/semantic.js`），
+7. **语义打分实测更差，所以默认没开**：0.16.0 加了打分器接缝与本地字符 n-gram 打分（`lib/semantic.js`）。
    在 14 道题上实测：关键词 **86%**，semantic **64%**、hybrid **64%**（alpha 0.7/0.8/0.9 分别 64/71/71%），
    且负例题被误召回。原因是字符 n-gram 对任何中文文本都有非零相似度，把"沾边但无关"的主题也拉了进来。
    接缝保留（`recallScorer`），**默认仍是 `keyword`**；真正的语义检索需要嵌入模型（本地或接口），
    没做——因为本机现在没有可用模型，接一个远程 embedding 会让主题正文出本机，需要单独决定。
+8. **矛盾检测依赖模型配合**：`add` 的 `supersedes` 是"模型判断这两条在讲同一件事且互相矛盾"才填的，
+   填错对象会被拒（命中 0/多条都拒），但**填不填由它决定**——模型偷懒时两条矛盾事实仍会并存。
+   兜底只有一道：`pnpm audit` 的 `conflict-suspect` 提醒（措辞相同、数字不同），它不改任何东西。

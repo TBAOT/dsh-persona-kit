@@ -103,6 +103,45 @@ test('a turn produces memory edits through the model', async () => {
   })
 })
 
+test('a contradicting fact supersedes the old entry through the review path', async () => {
+  await withTempHome(async (home) => {
+    const memoryDir = path.join(home, 'personas', 'tester', 'memory')
+    await mkdir(memoryDir, { recursive: true })
+    const oldText = '发布窗口：周四 18:00 之后不发版'
+    await writeFile(
+      path.join(memoryDir, 'memory.md'),
+      `<!-- dsh-persona-kit v1 target=memory -->\n${oldText}\n`,
+      'utf8',
+    )
+
+    // 条目通常已经有 meta（失效链靠它记录旧 hash），先对齐一次
+    const { entryHash, refreshMeta } = await import('../lib/store.js')
+    await refreshMeta('tester')
+
+    // 模型返回一条 add，并指明它推翻了旧条目（用 hash 前缀定位）
+    const reply = JSON.stringify({
+      ops: [{ target: 'memory', action: 'add', content: '发布窗口改成周四 20:00 之后不发版', supersedes: entryHash(oldText).slice(0, 6) }],
+    })
+    const host = fakeHost(reply)
+    apply(host.ctx, { personaId: 'tester' })
+    await emit(host.listeners, 'session/event', { id: 'session-sup' }, {
+      type: 'user/message',
+      message: { content: [{ type: 'text', text: '发布窗口改了，以后周四 20:00 之后不发版' }] },
+    })
+    await emit(host.listeners, 'agent/turn-stopping', { agent: { id: 'session-sup' }, turn: 3 })
+    await tick()
+
+    const text = await readFile(path.join(memoryDir, 'memory.md'), 'utf8')
+    assert.match(text, /20:00/)
+    assert.equal(text.includes(oldText), false, '旧条目不能和新事实并存')
+
+    const meta = JSON.parse(await readFile(path.join(memoryDir, 'meta.json'), 'utf8'))
+    const chain = Object.values(meta.entries ?? {}).find((item) => item.status === 'superseded')
+    assert.ok(chain, 'meta 里要留下失效记录')
+    assert.match(String(chain.supersededBy ?? ''), /^[0-9a-f]{12}$/)
+  })
+})
+
 test('the workspace decides which persona gets the turn, and the log says so', async () => {
   await withTempHome(async (home) => {
     const workspace = path.join(home, 'proj')

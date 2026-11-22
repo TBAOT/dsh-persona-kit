@@ -34,6 +34,18 @@ test('a healthy persona has no structural errors', async () => {
   })
 })
 
+test('same wording with different numbers is a conflict, not a duplicate', async () => {
+  await withTempHome(async () => {
+    await writeEntries('conf', 'memory', ['发布窗口：周四 18:00 之后不发版', '发布窗口：周四 20:00 之后不发版'])
+    await refreshMeta('conf')
+    const report = auditPersona('conf', { limits: { user: 1375, memory: 3000 } })
+    const conflict = report.findings.find((item) => item.kind === 'conflict-suspect')
+    assert.ok(conflict, '措辞相同、数字不同应当提示')
+    assert.equal(conflict.level, 'advisory', '是不是改了口径要人判断，只提醒不报错')
+    assert.equal(report.findings.some((item) => item.kind === 'entry-near-duplicate'), false, '不能当成重复条目报错')
+  })
+})
+
 test('duplicate facts are reported, inside a tier and across tiers', async () => {
   await withTempHome(async () => {
     await writeEntries('dupes', 'memory', ['项目一律用 pnpm 安装依赖', '项目一律用 pnpm 安装依赖'])
