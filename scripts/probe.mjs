@@ -21,6 +21,7 @@ const split = arg('split') ?? 'all'
 const budget = Number(arg('budget') ?? 400)
 const topN = Number(arg('topN') ?? 3)
 const mode = arg('mode') ?? 'keyword'
+const slices = arg('slices') !== 'off'
 const alphaArg = arg('alpha')
 
 const MODES = {
@@ -62,7 +63,7 @@ export function judge(question, topics, options = {}) {
   const scorer = options.scorer ?? undefined
   const alpha = options.alpha ?? 1
   const ranked = rankTopics(question.q, topics, topN, { scorer, alpha })
-  const picked = selectTopics(question.q, topics, { topN, budget, scorer, alpha })
+  const picked = selectTopics(question.q, topics, { topN, budget, scorer, alpha, slices })
   const ms = performance.now() - startedAt
   const top = ranked[0]
   const topSlug = top?.topic?.slug ?? '(无)'

@@ -48,7 +48,9 @@
 
 - 取这一轮最后一条 user 消息作查询；
 - 对主题库打分：`slug + summary + keywords` 占 0.7、正文占 0.3，再乘 IDF（到处出现的词权重接近 0）；
-- 取前 3 篇摘要，拼成 ≤400 字符的块，追加到 `decision.messages` 的最后一条 user 消息后；
+- 取前 3 篇摘要，拼成 ≤400 字符的块，**作为运行时上下文（`persona:recall`）注入**——不进会话记录、不出现在你的消息里；
+- **顺带给最靠前的两篇配一段正文片段**（默认开，`recallSlices`）：正文按空行/日期标题切成段落，挑与问题重合度最高的那段，≤120 字，`·` 开头跟在指针下面。
+  实测代价：14 题平均注入 180 → 331 字符，命中率不变（86%），平均少 0.29 个主题指针——换来的是"不用开文件就能看到答案"；
 - 一轮只注入一次（按 turn 去重）；空消息/斜杠命令/寒暄（嗯、好、继续…）跳过；
 - 任何异常都只记录 `outcome` 不打断这一轮；`recallTopN: 0` 可整体关闭。
 
@@ -159,6 +161,7 @@ operations: [{ action: add | patch | remove, content, old_text }]
 | `topicsIndexLimit` | 600 | 主题索引的字符预算 |
 | `topicTtlDays` | 90 | 主题多久不更新就不再注入（0 = 永不过期） |
 | `recallTopN` / `recallBudget` | 3 / 400 | 每轮召回几篇、块多大 |
+| `recallSlices` / `recallSliceChars` | `true` / 120 | 是否给最靠前的两篇配正文片段，片段多长。关掉就只给指针（省 ~150 字符） |
 | `recallScorer` / `recallAlpha` | `keyword` / 0.5 | 打分方式：`keyword`（默认）、`semantic`（本地字符 n-gram）、`hybrid`（按 alpha 混合）。**实测见第 10 节：语义/混合都不如关键词，默认不要改** |
 | `routeThreshold` | 0.9 | 到这个占用比就把 `add` 转存主题 |
 | `addOverflow` | `topic` | 改成 `reject` 则恢复"超限即拒" |
