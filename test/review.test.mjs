@@ -103,6 +103,77 @@ test('a turn produces memory edits through the model', async () => {
   })
 })
 
+test('the consolidation prompt points at entries nobody touched for months', async () => {
+  await withTempHome(async (home) => {
+    // 绑定工作区，否则本轮会落到未认领池，整理轮读的是 default 的条目
+    const workspace = path.join(home, 'proj')
+    await mkdir(workspace, { recursive: true })
+    await mkdir(path.join(home, 'personas'), { recursive: true })
+    await writeFile(
+      path.join(home, 'personas', 'index.json'),
+      JSON.stringify({ version: 1, personas: [{ id: 'tester', name: 'tester', workspaces: [workspace], limits: { user: 1375, memory: 200 } }] }),
+      'utf8',
+    )
+    const memoryDir = path.join(home, 'personas', 'tester', 'memory')
+    await mkdir(memoryDir, { recursive: true })
+    const old = `很久以前写下、再没动过的条目：${'补充说明'.repeat(44)}`
+    await writeFile(path.join(memoryDir, 'memory.md'), `<!-- dsh-persona-kit v1 target=memory -->\n${old}\n`, 'utf8')
+    const { entryHash, refreshMeta } = await import('../lib/store.js')
+    await refreshMeta('tester', { at: '2026-01-01T00:00:00Z' })
+
+    // 第一次调用是复盘（返回无改动），第二次是整理轮
+    const host = fakeHost([
+      { text: JSON.stringify({ ops: [] }), finishKind: 'stop' },
+      { text: JSON.stringify({ entries: [old] }), finishKind: 'stop' },
+    ])
+    apply(host.ctx, { personaId: 'tester', memoryLimit: 120 })
+    await emit(host.listeners, 'session/event', { id: 'session-stale' }, {
+      type: 'user/message',
+      message: { content: [{ type: 'text', text: '这条早就写过了，随便聊聊' }] },
+    })
+    await emit(host.listeners, 'agent/turn-stopping', {
+      agent: { id: 'session-stale', session: { header: { cwd: workspace } } },
+      turn: 2,
+    })
+    await tick()
+    await tick()
+
+    const prompts = host.calls.map((call) => (call.messages ?? []).map((message) => (message.content ?? []).map((block) => block.text ?? '').join('')).join('\n'))
+    const consolidation = prompts.find((text) => text.includes('最久没被处理过的条目'))
+    assert.ok(consolidation, `整理轮提示里应当带上陈旧条目，实际调用 ${host.calls.length} 次`)
+    assert.match(consolidation, /天未动/)
+    assert.match(consolidation, new RegExp(entryHash(old).slice(0, 6)))
+  })
+})
+
+test('a consolidation pass that keeps an entry refreshes its lastTouchedAt', async () => {
+  await withTempHome(async (home) => {
+    const memoryDir = path.join(home, 'personas', 'tester', 'memory')
+    await mkdir(memoryDir, { recursive: true })
+    const old = `很久以前写下、再没动过的条目：${'补充说明'.repeat(24)}`
+    await writeFile(path.join(memoryDir, 'memory.md'), `<!-- dsh-persona-kit v1 target=memory -->\n${old}\n`, 'utf8')
+    const { entryHash, readMetaSync, refreshMeta } = await import('../lib/store.js')
+    await refreshMeta('tester', { at: '2026-01-01T00:00:00Z' })
+    assert.equal(readMetaSync('tester').entries[entryHash(old)].lastTouchedAt, '2026-01-01T00:00:00Z')
+
+    const host = fakeHost([
+      { text: JSON.stringify({ ops: [] }), finishKind: 'stop' },
+      { text: JSON.stringify({ entries: [old] }), finishKind: 'stop' },
+    ])
+    apply(host.ctx, { personaId: 'tester', memoryLimit: 120 })
+    await emit(host.listeners, 'session/event', { id: 'session-touch' }, {
+      type: 'user/message',
+      message: { content: [{ type: 'text', text: '这条保留，别删' }] },
+    })
+    await emit(host.listeners, 'agent/turn-stopping', { agent: { id: 'session-touch' }, turn: 4 })
+    await tick()
+    await tick()
+
+    const touched = readMetaSync('tester').entries[entryHash(old)].lastTouchedAt
+    assert.notEqual(touched, '2026-01-01T00:00:00Z', '被整理轮保留下来的条目要算作处理过')
+  })
+})
+
 test('a contradicting fact supersedes the old entry through the review path', async () => {
   await withTempHome(async (home) => {
     const memoryDir = path.join(home, 'personas', 'tester', 'memory')

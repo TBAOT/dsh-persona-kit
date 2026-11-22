@@ -84,8 +84,9 @@ operations: [{ action: add | patch | remove, content, old_text, supersedes? }]
 ### 4.3 后台整理轮（整层重写，`rethink`）
 
 - 时机：复盘之后，**同一角色的常驻 ≥90%** 且距离上次整理 ≥30 分钟；
+- 输入：整层条目（编号）+ **陈旧提示**——超过 `staleDays` 天没被处理过的 memory 条目，按天数降序列出 hash 与天数，提示模型"优先考虑合并或删除，删前先写进 topic"；用户画像档不参与（偏好停用 ≠ 失效）；
 - 动作：把整层交给模型重写成更少、更干净的条目，然后校验：每行 ≤120 字、无重复、总字符 ≤ 上限、**条数不得少于原来的 2/3**；
-- 通过才写：先备份到 `~/.dsh/trash/`，再替换，并写一条 `kind: "consolidate"` 的 metrics；
+- 通过才写：先备份到 `~/.dsh/trash/`，再替换，并写一条 `kind: "consolidate"` 的 metrics；被保留下来的条目算"处理过"，`meta.json` 的 `lastTouchedAt` 会刷新（陈旧度靠它，不靠每次都会变的 `lastSeenAt`）；
 - 不通过或模型输出不合法：整批放弃，只记账，不动文件。
 
 **为什么整理不给你在对话里调用**：照 Letta 的做法（`memory_rethink` 只给 sleep-time agent），对话轮只做精确编辑，整层重写放在后台——避免它在聊天中途大扫除。
@@ -134,7 +135,7 @@ operations: [{ action: add | patch | remove, content, old_text, supersedes? }]
 | 入口 | 看什么 |
 |---|---|
 | `pnpm health` | 每个角色最近 5 轮的注入次数、outcome 分布、tokens；verdict：`ok`/`broken`/`silent`/`unverified`/`stale` |
-| `pnpm audit` | 记忆库结构：空摘要、超限、近似重复主题、档内/跨档重复、meta 漂移（这些算错误），缺别名/超长/接近上限只提醒 |
+| `pnpm audit` | 记忆库结构：空摘要、超限、近似重复主题、档内/跨档重复、meta 漂移（这些算错误），缺别名/超长/接近上限/条目陈旧（`stale-entry`，超过 `staleDays` 未处理）只提醒 |
 | `pnpm probe` | 检索质量：14 道真实题，按题型报命中率 / 平均注入字符 / 平均耗时；`--split=tune|verify` |
 | `pnpm doctor` | **升级前**检查 profile：补丁条目是否符合新版 Loader 校验、`link:` 依赖能否解析。这类问题会让应用直接起不来，且不留日志 |
 | `GET /health?id=` | 面板页脚那一格的数据源（含 `readout.label/title/tone`） |
@@ -169,6 +170,7 @@ operations: [{ action: add | patch | remove, content, old_text, supersedes? }]
 | `routeThreshold` | 0.9 | 到这个占用比就把 `add` 转存主题 |
 | `addOverflow` | `topic` | 改成 `reject` 则恢复"超限即拒" |
 | `consolidate` / `consolidateThreshold` / `consolidateCooldownMs` | `true` / 0.9 / 30 分钟 | 后台整理轮的开关、触发线、冷却 |
+| `staleDays` / `consolidateAgeHint` | 90 / 8 | 多久没被处理算"陈旧"（0 关闭）；整理轮最多列几条陈旧条目给模型看 |
 | `ttlDays` | `{memory:180}` | 条目有效期（日期粒度，读侧过滤） |
 | `enabled` / `dryRun` / `everyTurns` / `maxTokens` / `provider` / `model` | 复盘相关 | 关闭复盘、只记不写、每几轮一次、输出预算、指定模型 |
 

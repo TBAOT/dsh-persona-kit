@@ -5,7 +5,7 @@ import path from 'node:path'
 import test from 'node:test'
 import { auditPersona, formatAudit } from '../lib/audit.js'
 import { writeTopic, writeTopicManifest } from '../lib/topics.js'
-import { refreshMeta, writeEntries } from '../lib/store.js'
+import { entryHash, refreshMeta, writeEntries } from '../lib/store.js'
 
 async function withTempHome(fn) {
   const home = await mkdtemp(path.join(os.tmpdir(), 'dsh-persona-kit-audit-'))
@@ -31,6 +31,29 @@ test('a healthy persona has no structural errors', async () => {
     await refreshMeta('clean')
     const report = auditPersona('clean', { limits: { user: 1375, memory: 3000 } })
     assert.equal(report.errors, 0, formatAudit(report))
+  })
+})
+
+test('an entry nobody touched for months is reported as stale', async () => {
+  await withTempHome(async () => {
+    const entry = '很久以前写下、再没动过的条目'
+    await writeEntries('stale', 'memory', [entry])
+    const metaFile = path.join(process.env.DSH_HOME, 'personas', 'stale', 'memory', 'meta.json')
+    await writeFile(
+      metaFile,
+      JSON.stringify({
+        version: 2,
+        entries: { [entryHash(entry)]: { target: 'memory', createdAt: '2026-01-01T00:00:00Z', lastTouchedAt: '2026-01-01T00:00:00Z', status: 'active' } },
+      }),
+      'utf8',
+    )
+    const report = auditPersona('stale', { limits: { user: 1375, memory: 3000 } })
+    const stale = report.findings.find((item) => item.kind === 'stale-entry')
+    assert.ok(stale, '超过 90 天未动应当提醒')
+    assert.equal(stale.level, 'advisory')
+
+    const off = auditPersona('stale', { limits: { user: 1375, memory: 3000 }, staleDays: 0 })
+    assert.equal(off.findings.some((item) => item.kind === 'stale-entry'), false, 'staleDays: 0 要能关掉')
   })
 })
 

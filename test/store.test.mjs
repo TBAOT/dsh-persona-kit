@@ -5,6 +5,8 @@ import {
   applyOperation,
   applyOperations,
   applyRethink,
+  entryAgeDays,
+  staleEntries,
   withPersonaLock,
   entryHash,
   visibleEntries,
@@ -267,8 +269,7 @@ test('supersedes replaces the contradicted entry in place and records the chain'
   assert.equal(batch.replaced.length, 1)
 })
 
-test('an unknown or ambiguous supersedes is refused instead of guessing', () => {
-  const unknown = applyOperation(['甲条'], { action: 'add', content: '新事实', supersedes: 'deadbeef1234' })
+test('an unknown or ambiguous supersedes is refused instead of guessing', () => {  const unknown = applyOperation(['甲条'], { action: 'add', content: '新事实', supersedes: 'deadbeef1234' })
   assert.equal(unknown.ok, false)
   assert.match(unknown.error, /没有命中/)
 
@@ -279,4 +280,39 @@ test('an unknown or ambiguous supersedes is refused instead of guessing', () => 
   })
   assert.equal(ambiguous.ok, false)
   assert.match(ambiguous.error, /命中 2 条/)
+})
+
+test('staleness counts only entries that were actually handled', () => {
+  const now = Date.parse('2026-11-22T00:00:00Z')
+  const fresh = '刚被处理过的条目'
+  const old = '很久没人动的条目'
+  const freshHash = entryHash(fresh)
+  const oldHash = entryHash(old)
+  const meta = {
+    entries: {
+      [freshHash]: { target: 'memory', createdAt: '2026-01-01T00:00:00Z', lastTouchedAt: '2026-11-20T00:00:00Z' },
+      [oldHash]: { target: 'memory', createdAt: '2026-01-01T00:00:00Z', lastTouchedAt: '2026-01-02T00:00:00Z' },
+    },
+  }
+  assert.equal(entryAgeDays(meta.entries[freshHash], now), 2)
+  const stale = staleEntries([fresh, old], meta, { days: 30, now })
+  assert.deepEqual(stale.map((item) => item.text), [old])
+  assert.ok(stale[0].age > 300)
+
+  // 用户画像档默认不参与淘汰排序：偏好停用不等于失效
+  const userMeta = { entries: { [oldHash]: { target: 'user', createdAt: '2025-01-01T00:00:00Z' } } }
+  assert.deepEqual(staleEntries([old], userMeta, { days: 30, now }), [])
+  assert.equal(staleEntries([old], userMeta, { days: 30, now, targets: ['user'] }).length, 1)
+
+  // 排序与上限：最久的在前，limit 生效
+  const meta3 = {
+    entries: {
+      [entryHash('a')]: { target: 'memory', lastTouchedAt: '2025-01-01T00:00:00Z' },
+      [entryHash('b')]: { target: 'memory', lastTouchedAt: '2025-06-01T00:00:00Z' },
+      [entryHash('c')]: { target: 'memory', lastTouchedAt: '2025-09-01T00:00:00Z' },
+    },
+  }
+  const ordered = staleEntries(['a', 'b', 'c'], meta3, { days: 1, now, limit: 2 })
+  assert.deepEqual(ordered.map((item) => item.text), ['a', 'b'])
+  assert.ok(ordered[0].age > ordered[1].age)
 })

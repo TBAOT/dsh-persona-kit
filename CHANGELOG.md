@@ -1,5 +1,18 @@
 # 变更日志
 
+## 0.19.0
+
+让整理轮看见"哪条早就没人用了"——重要性/新鲜度淘汰的第一步。
+
+- `meta.json` 新增 `lastTouchedAt`：只在 **patch 命中、被 supersedes 替换、整理轮保留** 这三种情况下刷新；
+  `lastSeenAt` 每次都变，所以它不能当陈旧度用。
+- 新纯函数 `entryAgeDays(record)`、`staleEntries(entries, meta, { days, limit, targets })`：
+  按陈旧度降序，默认只看 memory 档（用户画像档不参与——偏好停用不等于失效）。
+- 整理轮提示附上"最久没被处理过的 N 条（hash + 天数）"，并明确"删前先写进 topic"。
+- `pnpm audit` 新增 advisory `stale-entry`；`staleDays: 0` 可关闭。
+- 配置：`staleDays`（90）、`consolidateAgeHint`（8）。
+- 测试 192 项（陈旧度排序与分档、lastTouchedAt 语义、整理提示含陈旧段、整理轮保留即刷新）。
+
 ## 0.18.0
 
 矛盾不再是"两条并存"：新事实可以说清它推翻了哪条旧事实。
