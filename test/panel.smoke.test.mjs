@@ -61,4 +61,13 @@ test('the panel renders once without throwing', async () => {
   // Render with empty props: this is where a hoisting/TDZ mistake surfaces.
   const tree = main.component({})
   assert.ok(tree, '渲染结果不能为空')
+
+  // 同一棵树在英文下也要能渲染：语言只在 h() 里做文本替换，不该改变结构。
+  Object.defineProperty(globalThis, 'navigator', { value: { language: 'en-US' }, configurable: true })
+  try {
+    const english = main.component({})
+    assert.ok(english, '英文渲染结果不能为空')
+  } finally {
+    delete globalThis.navigator
+  }
 })
