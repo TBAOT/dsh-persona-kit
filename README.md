@@ -53,6 +53,7 @@ pnpm health    # 最近几轮召回是否真的注入了、token 花了多少
 pnpm audit     # 记忆结构体检：空摘要、超长、近似重复、跨档重复、策略一致性
 pnpm probe     # 用 14 道真实问题量检索质量（命中率 / 注入字数 / 耗时）
 pnpm doctor    # 升级 DSH 前跑一次：profile 补丁与 link 依赖是否有问题
+pnpm bench     # 对任意 JSONL 题集报 hit@1 / hit@N / 注入字符 / 耗时（见 docs/benchmark.md）
 ```
 
 ## 数据在哪

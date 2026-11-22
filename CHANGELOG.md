@@ -1,5 +1,17 @@
 # 变更日志
 
+## 0.21.0
+
+公开基准适配器：`pnpm bench` + `pnpm import-bench`。
+
+- `scripts/bench.mjs`：读 JSONL（`{q, expect, split}`），对指定角色的主题库报 **hit@1 / hit@N / 平均注入字符 / 平均耗时**；
+  负例判据与 probe 一致（无召回，或最高分低于 `--threshold`，默认 0.35）。
+- `scripts/import-bench.mjs`：把公开数据集（JSON 数组或 JSONL）按字段映射转成上面的格式；
+  答案到主题 slug 的映射不代做——那一步是判断，不是转换。
+- `docs/benchmark.md`：怎么跑、怎么读，以及"检索级 ≠ 答案级"的说明。
+- 自检：把 probe 题库转成 JSONL 再跑 `pnpm bench`，`hit@1` 与 `pnpm probe` 完全一致（都是 86%）。
+- 测试 201 项（bench 4 条：坏行、hit 判定与阈值、字段映射、JSONL 输入）。
+
 ## 0.20.0
 
 面板支持英文界面（中英切换）。
