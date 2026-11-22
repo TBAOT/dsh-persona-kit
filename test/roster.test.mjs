@@ -79,6 +79,73 @@ test('deleting a persona through the api takes its memory to the trash', async (
   })
 })
 
+test('a deleted persona can be listed in the trash and restored with its bindings', async () => {
+  await withTempHome(async (home) => {
+    const workspace = path.join(home, 'proj')
+    await mkdir(workspace, { recursive: true })
+    const { ctx, call } = fakeHost()
+    apply(ctx, {})
+    const headers = { 'x-dsh-persona-kit': '1' }
+
+    const created = await callApi(call, { method: 'POST', url: '/dsh-persona-kit/api/create', headers, body: { name: '待恢复' } })
+    const id = created.body.persona.id
+    await callApi(call, { method: 'POST', url: '/dsh-persona-kit/api/bind', headers, body: { id, workspace } })
+    await mkdir(path.join(home, 'personas', id, 'memory'), { recursive: true })
+    await writeFile(path.join(home, 'personas', id, 'memory', 'user.md'), '这条记忆要能回来', 'utf8')
+
+    const deleted = await callApi(call, { method: 'POST', url: '/dsh-persona-kit/api/delete', headers, body: { id } })
+    assert.equal(deleted.status, 200)
+
+    const trash = await callApi(call, { url: '/dsh-persona-kit/api/trash', headers })
+    const item = trash.body.items.find((entry) => entry.id === id)
+    assert.ok(item, '回收站里应当有它')
+    assert.equal(item.hasSnapshot, true)
+    assert.deepEqual(item.workspaces, [workspace])
+
+    const restored = await callApi(call, { method: 'POST', url: '/dsh-persona-kit/api/restore', headers, body: { name: item.name } })
+    assert.equal(restored.status, 200, JSON.stringify(restored.body))
+    assert.equal(restored.body.needsRebind, false, '有快照时工作区绑定一起回来')
+    assert.deepEqual(restored.body.persona.workspaces, [workspace])
+
+    const listed = await callApi(call, { url: '/dsh-persona-kit/api/list', headers })
+    assert.ok(listed.body.personas.some((entry) => entry.id === id))
+    const memory = await readFile(path.join(home, 'personas', id, 'memory', 'user.md'), 'utf8')
+    assert.equal(memory, '这条记忆要能回来')
+
+    const again = await callApi(call, { method: 'POST', url: '/dsh-persona-kit/api/restore', headers, body: { name: item.name } })
+    assert.equal(again.status, 400, '同名角色已存在时应当拒绝')
+  })
+})
+
+test('the panel can replace a topic body through the api', async () => {
+  await withTempHome(async (home) => {
+    const { ctx, call } = fakeHost()
+    apply(ctx, {})
+    const headers = { 'x-dsh-persona-kit': '1' }
+    const created = await callApi(call, { method: 'POST', url: '/dsh-persona-kit/api/create', headers, body: { name: '甲' } })
+    const id = created.body.persona.id
+
+    await callApi(call, {
+      method: 'POST',
+      url: '/dsh-persona-kit/api/topics',
+      headers,
+      body: { id, slug: '部署手册', summary: '部署与回滚', content: '旧正文' },
+    })
+    const saved = await callApi(call, {
+      method: 'POST',
+      url: '/dsh-persona-kit/api/topic/replace',
+      headers,
+      body: { id, slug: '部署手册', summary: '部署与回滚', body: '新正文' },
+    })
+    assert.equal(saved.status, 200)
+
+    const read = await callApi(call, { url: `/dsh-persona-kit/api/topics?id=${encodeURIComponent(id)}&slug=${encodeURIComponent('部署手册')}`, headers })
+    assert.equal(read.body.topic.body.trim(), '新正文')
+    assert.equal(read.body.topic.summary, '部署与回滚')
+    assert.equal(existsSync(path.join(home, 'personas', id, 'topics', '部署手册.md')), true)
+  })
+})
+
 test('workspace binding resolves nested cwd, case and slash form', () => {
   let index = createPersona(empty(), { name: 'Work' }).index
   index = bindWorkspace(index, 'work', 'C:\\A\\work\\proj').index

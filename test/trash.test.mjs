@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
-import { moveToTrash } from '../lib/trash.js'
+import { listTrash, moveToTrash } from '../lib/trash.js'
 
 async function withHome(fn) {
   const home = await mkdtemp(path.join(os.tmpdir(), 'dsh-persona-trash-'))
@@ -55,5 +55,35 @@ test('a missing directory is reported instead of throwing', async () => {
     const moved = moveToTrash(path.join(home, 'personas', '没有'), { kind: 'persona', id: '没有' })
     assert.equal(moved.moved, false)
     assert.equal(moved.reason, 'source-missing')
+  })
+})
+
+test('the trash lists persona directories with their index snapshot', async () => {
+  await withHome(async (home) => {
+    const dir = path.join(home, 'personas', '甲')
+    await mkdir(path.join(dir, 'memory'), { recursive: true })
+    await writeFile(
+      path.join(dir, '.persona-entry.json'),
+      JSON.stringify({ version: 1, entry: { id: '甲', name: '甲角色', workspaces: ['C:\\proj'], limits: { user: 800, memory: 900 } } }),
+      'utf8',
+    )
+    moveToTrash(dir, { kind: 'persona', id: '甲' })
+
+    const items = listTrash()
+    assert.equal(items.length, 1)
+    assert.equal(items[0].id, '甲')
+    assert.equal(items[0].entry.name, '甲角色')
+    assert.deepEqual(items[0].entry.workspaces, ['C:\\proj'])
+  })
+})
+
+test('a legacy trash directory without a snapshot still lists', async () => {
+  await withHome(async (home) => {
+    const legacy = path.join(home, 'trash', '2026-11-01-persona-旧角色')
+    await mkdir(legacy, { recursive: true })
+    const items = listTrash()
+    assert.equal(items.length, 1)
+    assert.equal(items[0].entry, null)
+    assert.equal(items[0].id, '旧角色')
   })
 })
