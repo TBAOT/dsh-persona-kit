@@ -18,8 +18,7 @@ async function withTempHome(fn) {
   }
 }
 
-test('refreshMeta moves lastTouchedAt only for the hashes handed to it', async () => {
-  await withTempHome(async () => {
+test('refreshMeta moves lastTouchedAt only for the hashes handed to it', async () => {  await withTempHome(async () => {
     const a = '条目甲'
     const b = '条目乙'
     await writeEntries('touch', 'memory', [a, b])
@@ -33,5 +32,29 @@ test('refreshMeta moves lastTouchedAt only for the hashes handed to it', async (
     assert.equal(next.entries[entryHash(a)].lastTouchedAt, '2026-11-20T00:00:00Z', '被处理的条目要刷新')
     assert.equal(next.entries[entryHash(b)].lastTouchedAt, '2026-11-01T00:00:00Z', '没被处理的条目保持原样')
     assert.equal(next.entries[entryHash(b)].createdAt, '2026-11-01T00:00:00Z', 'createdAt 不该被刷新')
+  })
+})
+
+test('origin is written for new entries only, never back-filled', async () => {
+  await withTempHome(async () => {
+    const oldEntry = '早就存在的条目'
+    await writeEntries('origin', 'memory', [oldEntry])
+    await refreshMeta('origin', { at: '2026-11-01T00:00:00Z' })
+    assert.equal(readMetaSync('origin').entries[entryHash(oldEntry)].origin, null, '老条目不该被补来源')
+
+    const fresh = '后来写入的条目'
+    await writeEntries('origin', 'memory', [oldEntry, fresh])
+    await refreshMeta('origin', {
+      at: '2026-11-20T00:00:00Z',
+      origin: { kind: 'review', sessionId: 'session-1', cwd: 'C:\\work\\proj' },
+    })
+    const meta = readMetaSync('origin')
+    assert.equal(meta.entries[entryHash(oldEntry)].origin, null, '老条目仍然没有来源')
+    assert.deepEqual(meta.entries[entryHash(fresh)].origin, {
+      kind: 'review',
+      sessionId: 'session-1',
+      cwd: 'C:\\work\\proj',
+      at: '2026-11-20T00:00:00Z',
+    })
   })
 })

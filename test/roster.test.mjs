@@ -142,6 +142,37 @@ test('the recall endpoint returns recent turns with their block text', async () 
   })
 })
 
+test('the unclaimed pool reports where each entry came from', async () => {
+  await withTempHome(async (home) => {
+    const { ctx, call } = fakeHost()
+    apply(ctx, {})
+    const headers = { 'x-dsh-persona-kit': '1' }
+
+    const { writeEntries, refreshMeta, entryHash } = await import('../lib/store.js')
+    const text = '未认领池里的一条记忆'
+    await writeEntries('default', 'memory', [text])
+    await refreshMeta('default', {
+      at: '2026-11-20T00:00:00Z',
+      origin: { kind: 'review', sessionId: 'session-495e78e2-b0c7-442d-b392-4a6b5b8861e4', cwd: 'C:\\work\\proj' },
+    })
+
+    const got = await callApi(call, { url: '/dsh-persona-kit/api/unclaimed', headers })
+    assert.equal(got.status, 200)
+    const entry = got.body.memory.entries.find((item) => item.text === text)
+    assert.ok(entry, '池子里应当有这条')
+    assert.equal(entry.hash, entryHash(text))
+    assert.equal(entry.origin.kind, 'review')
+    assert.equal(entry.origin.cwd, 'C:\\work\\proj')
+    assert.match(entry.origin.sessionId, /^session-/)
+
+    // 没有 meta 的老条目：origin 为 null，面板会显示"无来源记录"
+    await writeEntries('default', 'memory', [text, '没有 meta 的旧条目'])
+    const again = await callApi(call, { url: '/dsh-persona-kit/api/unclaimed', headers })
+    const legacy = again.body.memory.entries.find((item) => item.text === '没有 meta 的旧条目')
+    assert.equal(legacy.origin, null)
+  })
+})
+
 test('the panel can replace a topic body through the api', async () => {
   await withTempHome(async (home) => {
     const { ctx, call } = fakeHost()

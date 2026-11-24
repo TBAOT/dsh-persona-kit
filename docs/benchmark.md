@@ -49,6 +49,15 @@ pnpm bench --file=bench.jsonl --persona=验证角色 --split=test --threshold=0.
 
 ## 从公开数据集导入
 
+**首选 LongMemEval**（`xiaowu0162/longmemeval-cleaned`，**MIT**，500 题，覆盖信息抽取/多会话推理/时间推理/知识更新/拒答）。
+数据不在 GitHub 仓库里，从 HuggingFace 下载后放到 `bench-data/`（该目录不进版本库）：
+
+| 文件 | 用途 | 直链 |
+|---|---|---|
+| `longmemeval_s_cleaned.json` | **首选**：小 haystack | https://huggingface.co/datasets/xiaowu0162/longmemeval-cleaned/resolve/main/longmemeval_s_cleaned.json?download=true |
+| `longmemeval_oracle.json` | 只用证据会话，判断"切分是不是瓶颈" | https://huggingface.co/datasets/xiaowu0162/longmemeval-cleaned/resolve/main/longmemeval_oracle.json?download=true |
+| `longmemeval_m_cleaned.json` | 大 haystack，后跑 | https://huggingface.co/datasets/xiaowu0162/longmemeval-cleaned/resolve/main/longmemeval_m_cleaned.json?download=true |
+
 `pnpm import-bench` 只做机械映射，不猜 slug：
 
 ```sh
