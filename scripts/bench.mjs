@@ -12,7 +12,7 @@
  *   { "q": "发布窗口是什么时候", "expect": ["deploy-runbook"], "split": "test" }
  * `expect` may be a string (single gold slug) or an array; omit it for a negative case.
  */
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -26,6 +26,8 @@ const split = arg('split')
 const topN = Number(arg('topN') ?? 3)
 const budget = Number(arg('budget') ?? 400)
 const threshold = Number(arg('threshold') ?? 0.35)
+/** --home 指向一个临时 DSH_HOME（例如基准转换出来的语料库），不碰 ~/.dsh。 */
+const home = arg('home')
 
 const target = file ? (path.isAbsolute(file) ? file : path.resolve(process.cwd(), file)) : null
 
@@ -67,12 +69,27 @@ export function scoreRow(row, topics, options = {}) {
   return { at1, atN, ms, chars: picked.block.length, got: slugs[0] ?? '(none)', topScore, expected }
 }
 
+/** 当前 DSH_HOME 下所有角色目录（有 topics 的才回）。 */
+export function discoverPersonas(env = process.env) {
+  const home = env.DSH_HOME || path.join(os.homedir(), '.dsh')
+  const dir = path.join(home, 'personas')
+  try {
+    return readdirSync(dir, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name)
+      .sort()
+  } catch {
+    return []
+  }
+}
+
 const invokedDirectly = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href
 if (invokedDirectly) {
   if (!file) {
     console.error('缺少 --file=<questions.jsonl>')
     process.exit(1)
   }
+  if (home) process.env.DSH_HOME = path.isAbsolute(home) ? home : path.resolve(process.cwd(), home)
   if (!existsSync(target)) {
     console.error(`找不到文件：${target}`)
     process.exit(1)
@@ -83,22 +100,40 @@ if (invokedDirectly) {
     console.error(`没有可评测的题目（文件内 ${rows.length} 行${bad ? `，坏行 ${bad}` : ''}）`)
     process.exit(1)
   }
-  const personas = persona ? [persona] : ['验证角色', 'default'].filter((id) => listTopicsSync(id).length)
+  const personas = persona
+    ? [persona]
+    : discoverPersonas().filter((id) => listTopicsSync(id).length)
   if (!personas.length) {
     console.error('没有可用的主题库（先给角色写入主题，或指定 --persona）')
     process.exit(1)
   }
 
   const results = []
-  for (const id of personas) {
-    const topics = listTopicsSync(id)
-    if (!topics.length) continue
-    console.log(`\n== ${id}（${topics.length} 个主题）==`)
+  // 行里带 persona 的（基准转换出来的）只用它自己的语料库；否则按 persona × 行 组合跑。
+  const perRow = filtered.every((row) => typeof row.persona === 'string')
+  if (perRow) {
     for (const row of filtered) {
+      const topics = listTopicsSync(row.persona)
+      if (!topics.length) {
+        console.log(`\n跳过 ${row.persona}：没有主题库`)
+        continue
+      }
       const result = scoreRow(row, topics, { topN, budget, threshold })
-      results.push({ persona: id, ...row, ...result })
+      results.push({ persona: row.persona, ...row, ...result })
       const mark = result.at1 ? '✓' : result.atN ? '~' : '✗'
-      console.log(`  ${mark} ${row.q}\n      → ${result.got}（期望 ${(result.expected ?? ['(负例)']).join('|')}，注入 ${result.chars} 字符）`)
+      console.log(`  ${mark} [${row.split ?? '-'}] ${row.q}\n      → ${result.got}（期望 ${(result.expected ?? ['(负例)']).join('|')}，注入 ${result.chars} 字符）`)
+    }
+  } else {
+    for (const id of personas) {
+      const topics = listTopicsSync(id)
+      if (!topics.length) continue
+      console.log(`\n== ${id}（${topics.length} 个主题）==`)
+      for (const row of filtered) {
+        const result = scoreRow(row, topics, { topN, budget, threshold })
+        results.push({ persona: id, ...row, ...result })
+        const mark = result.at1 ? '✓' : result.atN ? '~' : '✗'
+        console.log(`  ${mark} ${row.q}\n      → ${result.got}（期望 ${(result.expected ?? ['(负例)']).join('|')}，注入 ${result.chars} 字符）`)
+      }
     }
   }
 

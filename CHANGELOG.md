@@ -1,5 +1,17 @@
 # 变更日志
 
+## 0.25.0
+
+LongMemEval 跑分的工具链就位（等数据到位即可出数字）。
+
+- `scripts/import-longmemeval.mjs`：按"每题一份 haystack"的组织方式，为每题建临时 persona
+  （一段会话 = 一篇主题），`expect` 取 `answer_session_ids`，`_abs` 拒答题 `expect: null`，每行带 `persona`。
+- `scripts/bench.mjs`：新增 `--home=`（指向临时语料库，不碰 `~/.dsh`）；行内带 `persona` 时只用该题的语料库；
+  未指定角色时自动发现当前 home 下所有角色目录。
+- `docs/benchmark.md`：LongMemEval（MIT）三份数据的直链、转换与跑法、`--limit` 先跑 50 题的约定。
+- 用 3 题合成样例端到端跑通（转换 → 临时库 → 跑分），确认口径与命令无误。
+- 测试 214 项（转换器 3 条）。
+
 ## 0.24.0
 
 面板三件事：按条编辑、术语统一、未认领池看得到来源。

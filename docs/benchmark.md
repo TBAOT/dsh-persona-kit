@@ -65,6 +65,24 @@ pnpm import-bench --from=locomo.json --out=bench.jsonl \
   --question-field=question --expect-field=gold --split-field=split
 ```
 
+### LongMemEval 专用转换器
+
+LongMemEval 的组织方式是"**每题一份 haystack**"，所以每题的语料库是独立的，不能混在一起检索。
+`pnpm import-longmemeval` 会：
+
+1. 给每题建一个临时 persona：`bench-data/home-<split>/personas/<qid>/topics/s<index>.md`（一段会话一篇主题）；
+2. 输出题集：`expect` = 证据会话 `answer_session_ids` 对应的 slug；`_abs` 结尾的拒答题 `expect: null`；
+   每行带 `persona: <qid>`，`pnpm bench` 见到它就只对该题的语料库检索；
+3. 打印下一步命令。
+
+```sh
+pnpm import-longmemeval --file=bench-data/longmemeval_s_cleaned.json --limit=50
+pnpm bench --home=bench-data/home-longmemeval_s_cleaned-json \
+           --file=bench-data/longmemeval.jsonl --topN=5
+```
+
+`--limit` 先跑 50 题看趋势，再决定是否跑全量（500 题 ≈ 20k 篇主题文件）。
+
 - 输入可以是 JSON 数组或 JSONL；
 - `expect` 留空表示负例；
 - **答案到 slug 的映射需要你自己做**：公开数据集给的是自由文本答案，而我们要的是主题 slug

@@ -37,7 +37,8 @@
     "scripts/doctor.mjs",
     "scripts/release.mjs",
     "scripts/bench.mjs",
-    "scripts/import-bench.mjs"
+    "scripts/import-bench.mjs",
+    "scripts/import-longmemeval.mjs"
   ],
   "scripts": {
     "test": "node --test",
@@ -51,7 +52,8 @@
     "release": "node scripts/release.mjs",
     "doctor": "node scripts/doctor.mjs",
     "bench": "node scripts/bench.mjs",
-    "import-bench": "node scripts/import-bench.mjs"
+    "import-bench": "node scripts/import-bench.mjs",
+    "import-longmemeval": "node scripts/import-longmemeval.mjs"
   },
   "engines": {
     "dsh": ">=0.2.2-rc.1",
